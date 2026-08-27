@@ -1,0 +1,29 @@
+FROM vastai/base-image:cuda-12.8.1-cudnn-devel-ubuntu22.04-py311
+
+LABEL org.opencontainers.image.title="Arye Vast Mobile AI Stack"
+LABEL org.opencontainers.image.description="LTX-2.5, MuseTalk, Chatterbox, OpenMontage and Gradio for Vast.ai"
+LABEL org.opencontainers.image.source="https://github.com/aryedu110-cmd/arye-vast-mobile-ai-stack"
+
+COPY --chown=root:root . /opt/arye-vast-mobile-ai-stack
+COPY --chown=root:root docker/80-arye-ai-stack.sh /etc/vast_boot.d/80-arye-ai-stack.sh
+
+RUN chmod 0755 \
+      /opt/arye-vast-mobile-ai-stack/onstart.sh \
+      /opt/arye-vast-mobile-ai-stack/launch.sh \
+      /opt/arye-vast-mobile-ai-stack/scripts/*.sh \
+      /opt/arye-vast-mobile-ai-stack/scripts/*.py \
+      /etc/vast_boot.d/80-arye-ai-stack.sh
+
+# The inherited Vast entrypoint remains intact. In the Vast template use
+# Docker ENTRYPOINT mode and pass: --jupyter-override
+ENV ARYE_STACK_ENABLE=1 \
+    STACK_ROOT=/workspace/ai-stack \
+    SETUP_MODE=install \
+    AUTO_DESTROY_MINUTES=240 \
+    AUTO_STOP_MINUTES=0 \
+    AUTO_LAUNCH=0 \
+    INSTALL_LTX=0 \
+    INSTALL_MUSETALK=1 \
+    INSTALL_CHATTERBOX=1 \
+    INSTALL_OPENMONTAGE=1 \
+    GRADIO_PORT=7860

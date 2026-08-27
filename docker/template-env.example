@@ -1,0 +1,21 @@
+# Non-secret Vast template settings for Docker ENTRYPOINT launch mode.
+# Pass this argument to the inherited entrypoint: --jupyter-override
+
+ARYE_STACK_ENABLE=1
+SETUP_MODE=install
+STACK_ROOT=/workspace/ai-stack
+PERSIST_ROOT=/workspace/persistent-ai-cache
+AUTO_DESTROY_MINUTES=240
+AUTO_STOP_MINUTES=0
+AUTO_LAUNCH=0
+INSTALL_LTX=0
+INSTALL_MUSETALK=1
+INSTALL_CHATTERBOX=1
+INSTALL_OPENMONTAGE=1
+GRADIO_PORT=7860
+
+# Add these only through Vast's environment-variable UI, never to the image:
+# HF_TOKEN=<read-only-token>; required when INSTALL_LTX=1
+# APP_USER=<username>; required when AUTO_LAUNCH=1
+# APP_PASSWORD=<strong-unique-password>; required when AUTO_LAUNCH=1
+

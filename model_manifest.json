@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "recommended_disk_gb": 300,
+  "minimum_disk_gb": 180,
+  "orchestration": {
+    "openmontage": {
+      "commit": "cd9f3c1f03368be87b140af494914b8ee4e3c7a4",
+      "license": "AGPL-3.0",
+      "default_install": false
+    }
+  },
+  "models": {
+    "ltx25": {
+      "repo": "Lightricks/LTX-2.5",
+      "gated": true,
+      "files": [
+        "diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors",
+        "text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors",
+        "vae/ltx-2.5-video-vae-conv-bf16.safetensors",
+        "vae/ltx-2.5-audio-vae-bf16.safetensors",
+        "model_patches/ltx-2.5-duration-head-bf16.safetensors",
+        "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
+      ]
+    },
+    "musetalk": {
+      "repo": "TMElyralab/MuseTalk",
+      "gated": false,
+      "version": "1.5",
+      "official_download_script": "download_weights.sh"
+    },
+    "chatterbox": {
+      "repo": "ResembleAI/chatterbox",
+      "gated": false,
+      "language": "he",
+      "supports_voice_cloning": true,
+      "model": "Chatterbox Multilingual V3"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+.git
+.gitignore
+.github/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv*/
+*.zip
+vast-onstart-inline.sh
+tests/
+README_HE.md
+REGISTRY_HE.md
