@@ -21,6 +21,8 @@ grep -Fq 'duration_head/ltx-2.5-duration-head-bf16.safetensors' "$HERE/bootstrap
 grep -Fq 'LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'Width/height must divide by 32' "$HERE/run_ltx_clip.sh"
 grep -Fq 'SETUP_RESULT=READY' "$HERE/entrypoint.sh"
+grep -Fxq 'report_setup' "$HERE/entrypoint.sh"
+! grep -Fq 'report_setup &' "$HERE/entrypoint.sh"
 ! grep -Eq 'printf.*CONTAINER_API_KEY|echo.*CONTAINER_API_KEY' "$HERE/self_stop.sh"
 grep -Fq 'FROM ubuntu:24.04' "$HERE/Dockerfile"
 printf 'PRODUCTION_BOOTSTRAP_STATIC_TESTS=PASS\n'

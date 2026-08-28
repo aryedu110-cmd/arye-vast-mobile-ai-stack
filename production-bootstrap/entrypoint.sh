@@ -105,8 +105,10 @@ report_setup() {
   fi
   return "$setup_status"
 }
-report_setup &
-REPORTER_PID=$!
+# Run the reporter in the main shell.  It may monitor the setup in a loop, but
+# only the shell that launched bootstrap_ltx.sh is allowed to wait for it and
+# collect its real exit status.
+report_setup
 
 stage supervise
 while kill -0 "$HEALTH_PID" 2>/dev/null && kill -0 "$TUNNEL_PID" 2>/dev/null; do sleep 2; done
