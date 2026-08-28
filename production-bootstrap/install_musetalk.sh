@@ -10,6 +10,7 @@ readonly DOWNLOAD_TIMEOUT_SECONDS="${MUSE_DOWNLOAD_TIMEOUT_SECONDS:-900}"
 readonly VERIFY_TIMEOUT_SECONDS="${MUSE_VERIFY_TIMEOUT_SECONDS:-180}"
 readonly RETRY_ATTEMPTS="${MUSE_RETRY_ATTEMPTS:-3}"
 readonly MODEL_DIR="$MUSE_ROOT/models"
+readonly SOURCE_MARKER="$MUSE_ROOT/.arye-source-ref"
 
 required_files=(
   musetalk/musetalk.json musetalk/pytorch_model.bin
@@ -62,18 +63,46 @@ validate_models() {
   ! find "$MODEL_DIR" -type f -name '*.incomplete' -print -quit | grep -q .
 }
 
+source_complete() {
+  [[ -f "$SOURCE_MARKER" ]] || return 1
+  [[ "$(<"$SOURCE_MARKER")" == "$MUSE_REF" ]] || return 1
+  [[ -f "$MUSE_ROOT/requirements.txt" && -d "$MUSE_ROOT/musetalk" ]]
+}
+
+fetch_source_archive() {
+  local parent tmp extracted
+  parent="$(dirname "$MUSE_ROOT")"
+  mkdir -p "$parent"
+  tmp="$(mktemp -d "$parent/.musetalk-source.XXXXXX")"
+  if ! curl --fail --location --retry 4 --retry-all-errors --connect-timeout 20 --max-time 300 \
+    "https://github.com/TMElyralab/MuseTalk/archive/${MUSE_REF}.tar.gz" \
+    -o "$tmp/source.tar.gz"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  tar -xzf "$tmp/source.tar.gz" -C "$tmp"
+  extracted="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -name 'MuseTalk-*' -print -quit)"
+  [[ -n "$extracted" && -f "$extracted/requirements.txt" && -d "$extracted/musetalk" ]] || {
+    rm -rf -- "$tmp"
+    return 1
+  }
+  rm -rf -- "$MUSE_ROOT"
+  mv -- "$extracted" "$MUSE_ROOT"
+  printf '%s\n' "$MUSE_REF" > "$SOURCE_MARKER"
+  rm -rf -- "$tmp"
+}
+
 complete() {
   [[ -f "$STATE_DIR/musetalk.ready" ]] || return 1
+  source_complete || return 1
   validate_models
 }
 
 complete && { printf 'MUSETALK_CACHE=READY\n'; exit 0; }
 mkdir -p "$(dirname "$MUSE_ROOT")" "$(dirname "$MUSE_VENV")" "$STATE_DIR"
-if [[ ! -d "$MUSE_ROOT/.git" ]]; then
-  retry clone timeout --foreground 300 git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git "$MUSE_ROOT"
+if ! source_complete; then
+  retry source_archive fetch_source_archive
 fi
-retry fetch timeout --foreground 300 git -C "$MUSE_ROOT" fetch --depth 1 origin "$MUSE_REF"
-git -C "$MUSE_ROOT" checkout --detach "$MUSE_REF"
 
 uv python install 3.10
 uv venv --python 3.10 "$MUSE_VENV"

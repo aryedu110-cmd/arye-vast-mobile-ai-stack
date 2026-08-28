@@ -82,6 +82,7 @@ stage start_ltx_setup
 (
   set -o pipefail
   stdbuf -oL -eL /opt/arye-production/bootstrap_ltx.sh 2>&1 \
+    | tr '\r\000' '\n\n' \
     | tee "$STATE_DIR/setup.log" \
     | stdbuf -oL awk '
         BEGIN { IGNORECASE=1 }
