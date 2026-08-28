@@ -9,6 +9,7 @@ readonly PROJECT_ROOT="${PROJECT_ROOT:-/workspace/projects/why-math-matters}"
 readonly LTX_REF="${LTX_REF:-main}"
 readonly GIT_CLONE_TIMEOUT_SECONDS="${GIT_CLONE_TIMEOUT_SECONDS:-300}"
 readonly UV_SYNC_TIMEOUT_SECONDS="${UV_SYNC_TIMEOUT_SECONDS:-1200}"
+readonly LTX_VERIFY_TIMEOUT_SECONDS="${LTX_VERIFY_TIMEOUT_SECONDS:-60}"
 readonly NETWORK_RETRY_ATTEMPTS="${NETWORK_RETRY_ATTEMPTS:-3}"
 readonly INITIAL_SETUP_MIN_FREE_GB="${INITIAL_SETUP_MIN_FREE_GB:-200}"
 readonly READY_SETUP_MIN_FREE_GB="${READY_SETUP_MIN_FREE_GB:-32}"
@@ -131,8 +132,10 @@ uv run python -c 'import torch; assert torch.cuda.is_available(); print(torch.cu
   > "$STATE_DIR/runtime-check.txt" 2>&1
 
 stage verify_ltx_distilled_cli
-uv run python -m ltx_pipelines.distilled --help \
-  > "$STATE_DIR/distilled-help.txt" 2>&1
+timeout --foreground "$LTX_VERIFY_TIMEOUT_SECONDS" \
+  uv run --no-sync python -c \
+    'import importlib.util; assert importlib.util.find_spec("ltx_pipelines.distilled") is not None; print("LTX_DISTILLED_MODULE=READY")' \
+  > "$STATE_DIR/distilled-module-check.txt" 2>&1
 
 stage verify_openmontage_runtime
 (

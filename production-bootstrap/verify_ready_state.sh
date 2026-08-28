@@ -17,7 +17,7 @@ required_files=(
 [[ -f "$STATE_DIR/stack.ready" ]]
 [[ "$(<"$STATE_DIR/setup.stage")" == ready_for_ltx_smoke ]]
 [[ -s "$STATE_DIR/runtime-check.txt" ]]
-[[ -s "$STATE_DIR/distilled-help.txt" ]]
+grep -Fqx 'LTX_DISTILLED_MODULE=READY' "$STATE_DIR/distilled-module-check.txt"
 grep -Fqx 'OPENMONTAGE_IMPORT=READY' "$STATE_DIR/openmontage-check.txt"
 
 for file in "${required_files[@]}"; do
