@@ -7,12 +7,41 @@ readonly MODEL_ROOT="${MODEL_ROOT:-/workspace/arye-production/models/ltx-2.5}"
 readonly OPENMONTAGE_ROOT="${OPENMONTAGE_ROOT:-/workspace/arye-production/repos/OpenMontage}"
 readonly PROJECT_ROOT="${PROJECT_ROOT:-/workspace/projects/why-math-matters}"
 readonly LTX_REF="${LTX_REF:-main}"
+readonly GIT_CLONE_TIMEOUT_SECONDS="${GIT_CLONE_TIMEOUT_SECONDS:-300}"
+readonly UV_SYNC_TIMEOUT_SECONDS="${UV_SYNC_TIMEOUT_SECONDS:-1200}"
+readonly NETWORK_RETRY_ATTEMPTS="${NETWORK_RETRY_ATTEMPTS:-3}"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LTX_ROOT")" "$MODEL_ROOT" "$PROJECT_ROOT"/{inputs,prompts,renders,overlays,logs}
 umask 077
 stage() { printf '%s\n' "$1" > "$STATE_DIR/setup.stage"; printf 'SETUP_STAGE=%s\n' "$1"; }
 failed() { touch "$STATE_DIR/setup.failed"; stage failed; }
 trap failed ERR
+
+retry() {
+  local attempt=1
+  local status=0
+  while (( attempt <= NETWORK_RETRY_ATTEMPTS )); do
+    printf 'ATTEMPT=%s/%s COMMAND=%s\n' "$attempt" "$NETWORK_RETRY_ATTEMPTS" "$1"
+    if "${@:2}"; then
+      return 0
+    else
+      status=$?
+    fi
+    printf 'RETRY_PENDING=%s EXIT_CODE=%s\n' "$1" "$status" >&2
+    (( attempt++ ))
+    sleep 5
+  done
+  return "$status"
+}
+
+clone_ltx_repo() {
+  if [[ -e "$LTX_ROOT" && ! -d "$LTX_ROOT/.git" ]]; then
+    rm -rf -- "$LTX_ROOT"
+  fi
+  timeout --foreground "$GIT_CLONE_TIMEOUT_SECONDS" \
+    git clone --progress --depth 1 --branch "$LTX_REF" \
+    https://github.com/Lightricks/LTX-2.git "$LTX_ROOT"
+}
 
 stage validate_host
 command -v nvidia-smi >/dev/null
@@ -27,16 +56,31 @@ if [[ "${TEST_MODE:-0}" == 1 ]]; then
   exit 0
 fi
 
-stage install_ltx_runtime
+stage clone_ltx_repo
 if [[ ! -d "$LTX_ROOT/.git" ]]; then
-  git clone --depth 1 --branch "$LTX_REF" https://github.com/Lightricks/LTX-2.git "$LTX_ROOT"
+  retry git_clone clone_ltx_repo
 fi
-git -C "$LTX_ROOT" rev-parse HEAD > "$STATE_DIR/ltx.commit"
-cd "$LTX_ROOT"
-uv sync --extra natten
 
-stage install_openmontage
-/opt/arye-production/install_openmontage.sh
+stage resolve_ltx_revision
+git -C "$LTX_ROOT" rev-parse HEAD > "$STATE_DIR/ltx.commit"
+
+cd "$LTX_ROOT"
+if [[ -f "$STATE_DIR/ltx-runtime.ready" ]]; then
+  stage ltx_runtime_cached
+else
+  stage sync_ltx_dependencies
+  UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-60}" \
+    timeout --foreground "$UV_SYNC_TIMEOUT_SECONDS" uv sync --extra natten
+  touch "$STATE_DIR/ltx-runtime.ready"
+fi
+
+if [[ -f "$STATE_DIR/openmontage-runtime.ready" ]]; then
+  stage openmontage_runtime_cached
+else
+  stage install_openmontage
+  /opt/arye-production/install_openmontage.sh
+  touch "$STATE_DIR/openmontage-runtime.ready"
+fi
 
 stage download_ltx25_models
 hf download Lightricks/LTX-2.5 \
