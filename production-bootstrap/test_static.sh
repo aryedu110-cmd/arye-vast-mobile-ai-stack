@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for file in entrypoint.sh bootstrap_ltx.sh install_openmontage.sh run_ltx_clip.sh self_stop.sh arm_watchdog.sh; do
+for file in entrypoint.sh bootstrap_ltx.sh install_openmontage.sh run_ltx_clip.sh verify_ready_state.sh self_stop.sh arm_watchdog.sh; do
   bash -n "$HERE/$file"
   ! grep -Eq '^[[:space:]]*set[[:space:]]+-[^[:space:]]*x' "$HERE/$file"
 done
@@ -25,6 +25,11 @@ grep -Fq 'stage sync_ltx_dependencies' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'GIT_CLONE_TIMEOUT_SECONDS:-300' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'UV_SYNC_TIMEOUT_SECONDS:-1200' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'NETWORK_RETRY_ATTEMPTS:-3' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'INITIAL_SETUP_MIN_FREE_GB:-200' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'READY_SETUP_MIN_FREE_GB:-32' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'model_cache_complete' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'MODEL_CACHE=COMPLETE MIN_FREE_GB=' "$HERE/bootstrap_ltx.sh"
+grep -Fq "name '*.incomplete'" "$HERE/bootstrap_ltx.sh"
 grep -Fq 'ltx-runtime.ready' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'openmontage-runtime.ready' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'rm -f "$STATE_DIR/setup.failed" "$STATE_DIR/stack.ready"' "$HERE/bootstrap_ltx.sh"
@@ -35,6 +40,10 @@ grep -Fq 'cd "$OPENMONTAGE_ROOT"' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'OPENMONTAGE_REGISTRY=READY' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'Width/height must divide by 32' "$HERE/run_ltx_clip.sh"
+grep -Fq 'READY_STATE=VALID' "$HERE/verify_ready_state.sh"
+grep -Fq 'OPENMONTAGE_REGISTRY=READY' "$HERE/verify_ready_state.sh"
+grep -Fq "name '*.incomplete'" "$HERE/verify_ready_state.sh"
+grep -Fq 'verify_ready_state.sh' "$HERE/Dockerfile"
 grep -Fq 'SETUP_RESULT=READY' "$HERE/entrypoint.sh"
 grep -Fxq 'report_setup' "$HERE/entrypoint.sh"
 ! grep -Fq 'report_setup &' "$HERE/entrypoint.sh"
