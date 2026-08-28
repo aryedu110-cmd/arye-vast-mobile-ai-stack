@@ -33,7 +33,7 @@ if [[ ! -d "$LTX_ROOT/.git" ]]; then
 fi
 git -C "$LTX_ROOT" rev-parse HEAD > "$STATE_DIR/ltx.commit"
 cd "$LTX_ROOT"
-uv sync --frozen --extra natten
+uv sync --extra natten
 
 stage install_openmontage
 /opt/arye-production/install_openmontage.sh
@@ -44,7 +44,7 @@ hf download Lightricks/LTX-2.5 \
   text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors \
   vae/ltx-2.5-video-vae-bf16.safetensors \
   vae/ltx-2.5-audio-vae-bf16.safetensors \
-  duration_head/ltx-2.5-duration-head-bf16.safetensors \
+  model_patches/ltx-2.5-duration-head-bf16.safetensors \
   latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors \
   --local-dir "$MODEL_ROOT"
 

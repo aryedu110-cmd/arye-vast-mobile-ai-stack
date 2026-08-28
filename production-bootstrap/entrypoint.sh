@@ -100,8 +100,16 @@ report_setup() {
     return 0
   fi
   printf 'SETUP_RESULT=FAILED CODE=%s\n' "$setup_status" >&2
+  printf 'SETUP_DIAGNOSTIC_BEGIN\n' >&2
+  tail -n 80 "$STATE_DIR/setup.log" 2>/dev/null \
+    | awk 'BEGIN { IGNORECASE=1 } /token|password|authorization|api[_-]?key|bearer/ { print "[REDACTED_SENSITIVE_LINE]"; next } { print }' >&2
+  printf 'SETUP_DIAGNOSTIC_END\n' >&2
   if [[ "${AUTO_STOP_ON_SETUP_FAILURE:-1}" == 1 ]]; then
-    /opt/arye-production/self_stop.sh setup_failed || true
+    if /opt/arye-production/self_stop.sh setup_failed; then
+      # Keep the container alive while Vast applies the stop request. Exiting
+      # here can trigger the platform restart policy and repeat a failed setup.
+      while :; do sleep 3600; done
+    fi
   fi
   return "$setup_status"
 }

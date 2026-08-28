@@ -16,13 +16,15 @@ test_guard_line="$(grep -n 'TEST_MODE:-0' "$HERE/bootstrap_ltx.sh" | head -n1 | 
 download_line="$(grep -n 'stage download_ltx25_models' "$HERE/bootstrap_ltx.sh" | cut -d: -f1)"
 [[ "$test_guard_line" -lt "$download_line" ]]
 grep -Fq 'vae/ltx-2.5-video-vae-bf16.safetensors' "$HERE/bootstrap_ltx.sh"
-grep -Fq 'duration_head/ltx-2.5-duration-head-bf16.safetensors' "$HERE/bootstrap_ltx.sh"
-! grep -Fq 'model_patches/ltx-2.5-duration-head' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'model_patches/ltx-2.5-duration-head-bf16.safetensors' "$HERE/bootstrap_ltx.sh"
+! grep -Fq 'uv sync --frozen' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'Width/height must divide by 32' "$HERE/run_ltx_clip.sh"
 grep -Fq 'SETUP_RESULT=READY' "$HERE/entrypoint.sh"
 grep -Fxq 'report_setup' "$HERE/entrypoint.sh"
 ! grep -Fq 'report_setup &' "$HERE/entrypoint.sh"
+grep -Fq 'SETUP_DIAGNOSTIC_BEGIN' "$HERE/entrypoint.sh"
+grep -Fq 'REDACTED_SENSITIVE_LINE' "$HERE/entrypoint.sh"
 ! grep -Eq 'printf.*CONTAINER_API_KEY|echo.*CONTAINER_API_KEY' "$HERE/self_stop.sh"
 grep -Fq 'FROM ubuntu:24.04' "$HERE/Dockerfile"
 printf 'PRODUCTION_BOOTSTRAP_STATIC_TESTS=PASS\n'
