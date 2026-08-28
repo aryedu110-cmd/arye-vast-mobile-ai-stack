@@ -79,7 +79,23 @@ stage complete
 printf 'READY\n'
 
 stage start_ltx_setup
-/opt/arye-production/bootstrap_ltx.sh > "$STATE_DIR/setup.log" 2>&1 &
+(
+  set -o pipefail
+  stdbuf -oL -eL /opt/arye-production/bootstrap_ltx.sh 2>&1 \
+    | tee "$STATE_DIR/setup.log" \
+    | stdbuf -oL awk '
+        BEGIN { IGNORECASE=1 }
+        /^SETUP_STAGE=/ { next }
+        /token|password|authorization|api[_-]?key|bearer/ {
+          print "SETUP_LOG=[REDACTED_SENSITIVE_LINE]";
+          next
+        }
+        {
+          gsub(/https?:\/\/[^[:space:]\/]+@/, "https://[REDACTED]@")
+          print "SETUP_LOG=" $0
+        }
+      '
+) &
 SETUP_PID=$!
 
 report_setup() {
