@@ -13,6 +13,7 @@ readonly NETWORK_RETRY_ATTEMPTS="${NETWORK_RETRY_ATTEMPTS:-3}"
 
 mkdir -p "$STATE_DIR" "$(dirname "$LTX_ROOT")" "$MODEL_ROOT" "$PROJECT_ROOT"/{inputs,prompts,renders,overlays,logs}
 umask 077
+rm -f "$STATE_DIR/setup.failed" "$STATE_DIR/stack.ready"
 stage() { printf '%s\n' "$1" > "$STATE_DIR/setup.stage"; printf 'SETUP_STAGE=%s\n' "$1"; }
 failed() { touch "$STATE_DIR/setup.failed"; stage failed; }
 trap failed ERR
@@ -97,12 +98,19 @@ hf download Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler \
   ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors \
   --local-dir "$MODEL_ROOT/loras"
 
-stage verify_runtime
+stage verify_ltx_cuda
 uv run python -c 'import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))' \
-  > "$STATE_DIR/runtime-check.txt"
-uv run python -m ltx_pipelines.distilled --help > "$STATE_DIR/distilled-help.txt"
-"$OPENMONTAGE_ROOT/.venv/bin/python" -c 'from tools.tool_registry import registry; registry.discover()' \
-  > "$STATE_DIR/openmontage-check.txt"
+  > "$STATE_DIR/runtime-check.txt" 2>&1
+
+stage verify_ltx_distilled_cli
+uv run python -m ltx_pipelines.distilled --help \
+  > "$STATE_DIR/distilled-help.txt" 2>&1
+
+stage verify_openmontage_runtime
+(
+  cd "$OPENMONTAGE_ROOT"
+  .venv/bin/python -c 'from tools.tool_registry import registry; registry.discover(); print("OPENMONTAGE_REGISTRY=READY")'
+) > "$STATE_DIR/openmontage-check.txt" 2>&1
 
 touch "$STATE_DIR/stack.ready"
 stage ready_for_ltx_smoke
