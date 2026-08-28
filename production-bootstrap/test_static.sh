@@ -10,7 +10,8 @@ public_line="$(grep -n "printf 'PUBLIC_HEALTH=" "$HERE/entrypoint.sh" | cut -d: 
 ready_line="$(grep -n "printf 'READY" "$HERE/entrypoint.sh" | cut -d: -f1)"
 [[ -n "$public_line" && -n "$ready_line" && "$public_line" -lt "$ready_line" ]]
 grep -Fq 'TEST_LIMIT_SECONDS:-360' "$HERE/arm_watchdog.sh"
+grep -Fq 'test_host_validated_no_models' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'TEST_MODE:-0' "$HERE/bootstrap_ltx.sh"
 ! grep -Eq 'printf.*CONTAINER_API_KEY|echo.*CONTAINER_API_KEY' "$HERE/self_stop.sh"
 grep -Fq 'FROM ubuntu:24.04' "$HERE/Dockerfile"
 printf 'PRODUCTION_BOOTSTRAP_STATIC_TESTS=PASS\n'
-
