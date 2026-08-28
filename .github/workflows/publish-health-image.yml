@@ -47,8 +47,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/aryedu110-cmd/arye-vast-mobile-ai-stack:health-v1
-            ghcr.io/aryedu110-cmd/arye-vast-mobile-ai-stack:health-latest
+            ghcr.io/aryedu110-cmd/arye-vast-mobile-health:1
+            ghcr.io/aryedu110-cmd/arye-vast-mobile-health:latest
           cache-from: type=gha,scope=health-image
           cache-to: type=gha,mode=max,scope=health-image
           provenance: true
