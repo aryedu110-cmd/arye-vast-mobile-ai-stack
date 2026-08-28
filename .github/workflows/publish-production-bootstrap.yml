@@ -32,6 +32,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-5
+            ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-4
             ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -39,3 +40,4 @@ jobs:
         run: |
           docker logout ghcr.io
           docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-5
+          docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-4
