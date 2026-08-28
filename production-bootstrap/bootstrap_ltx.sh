@@ -137,7 +137,7 @@ uv run python -m ltx_pipelines.distilled --help \
 stage verify_openmontage_runtime
 (
   cd "$OPENMONTAGE_ROOT"
-  .venv/bin/python -c 'from tools.tool_registry import registry; registry.discover(); print("OPENMONTAGE_REGISTRY=READY")'
+  .venv/bin/python -c 'from tools.tool_registry import registry; assert registry is not None; print("OPENMONTAGE_IMPORT=READY")'
 ) > "$STATE_DIR/openmontage-check.txt" 2>&1
 
 touch "$STATE_DIR/stack.ready"

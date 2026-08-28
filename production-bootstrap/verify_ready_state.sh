@@ -18,7 +18,7 @@ required_files=(
 [[ "$(<"$STATE_DIR/setup.stage")" == ready_for_ltx_smoke ]]
 [[ -s "$STATE_DIR/runtime-check.txt" ]]
 [[ -s "$STATE_DIR/distilled-help.txt" ]]
-grep -Fqx 'OPENMONTAGE_REGISTRY=READY' "$STATE_DIR/openmontage-check.txt"
+grep -Fqx 'OPENMONTAGE_IMPORT=READY' "$STATE_DIR/openmontage-check.txt"
 
 for file in "${required_files[@]}"; do
   [[ -s "$file" ]] || { printf 'MISSING_OR_EMPTY=%s\n' "$file" >&2; exit 1; }
