@@ -15,6 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends \
       build-essential ca-certificates curl ffmpeg git git-lfs jq make nodejs npm rsync unzip \
+      libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
       python3 python3-pip python3-venv \
     && curl --fail --location --silent --show-error \
       "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" \
