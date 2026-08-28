@@ -19,6 +19,12 @@ awk -F, 'NR==1 {gsub(/ /,"",$2); if ($2+0 < 32000) exit 1}' "$STATE_DIR/gpu.txt"
 free_kb="$(df -Pk /workspace | awk 'NR==2 {print $4}')"
 (( free_kb >= 200 * 1024 * 1024 ))
 
+if [[ "${TEST_MODE:-0}" == 1 ]]; then
+  touch "$STATE_DIR/test-host.ready"
+  stage test_host_validated_no_models
+  exit 0
+fi
+
 stage install_ltx_runtime
 if [[ ! -d "$LTX_ROOT/.git" ]]; then
   git clone --depth 1 --branch "$LTX_TAG" https://github.com/Lightricks/LTX-2.git "$LTX_ROOT"
@@ -42,4 +48,3 @@ uv run python -c 'import torch; assert torch.cuda.is_available(); print(torch.cu
 
 touch "$STATE_DIR/stack.ready"
 stage ready_for_ltx_smoke
-
