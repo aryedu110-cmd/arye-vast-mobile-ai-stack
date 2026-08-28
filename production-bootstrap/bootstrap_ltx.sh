@@ -7,12 +7,13 @@ readonly MODEL_ROOT="${MODEL_ROOT:-/workspace/arye-production/models/ltx-2.5}"
 readonly OPENMONTAGE_ROOT="${OPENMONTAGE_ROOT:-/workspace/arye-production/repos/OpenMontage}"
 readonly PROJECT_ROOT="${PROJECT_ROOT:-/workspace/projects/why-math-matters}"
 readonly LTX_REF="${LTX_REF:-main}"
-readonly GIT_CLONE_TIMEOUT_SECONDS="${GIT_CLONE_TIMEOUT_SECONDS:-300}"
+readonly LTX_SOURCE_TIMEOUT_SECONDS="${LTX_SOURCE_TIMEOUT_SECONDS:-300}"
 readonly UV_SYNC_TIMEOUT_SECONDS="${UV_SYNC_TIMEOUT_SECONDS:-1200}"
 readonly LTX_VERIFY_TIMEOUT_SECONDS="${LTX_VERIFY_TIMEOUT_SECONDS:-60}"
 readonly NETWORK_RETRY_ATTEMPTS="${NETWORK_RETRY_ATTEMPTS:-3}"
 readonly INITIAL_SETUP_MIN_FREE_GB="${INITIAL_SETUP_MIN_FREE_GB:-200}"
 readonly READY_SETUP_MIN_FREE_GB="${READY_SETUP_MIN_FREE_GB:-32}"
+readonly LTX_SOURCE_MARKER="$LTX_ROOT/.arye-source-ref"
 
 readonly REQUIRED_MODEL_FILES=(
   "diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors"
@@ -48,13 +49,38 @@ retry() {
   return "$status"
 }
 
-clone_ltx_repo() {
-  if [[ -e "$LTX_ROOT" && ! -d "$LTX_ROOT/.git" ]]; then
-    rm -rf -- "$LTX_ROOT"
+ltx_source_complete() {
+  [[ -f "$LTX_SOURCE_MARKER" ]] || return 1
+  [[ "$(<"$LTX_SOURCE_MARKER")" == "$LTX_REF" ]] || return 1
+  [[ -f "$LTX_ROOT/pyproject.toml" && -d "$LTX_ROOT/packages/ltx-pipelines" ]]
+}
+
+fetch_ltx_source_archive() {
+  local parent tmp extracted
+  parent="$(dirname "$LTX_ROOT")"
+  mkdir -p "$parent"
+  find "$parent" -mindepth 1 -maxdepth 1 -type d -name '.ltx-source.*' -exec rm -rf -- {} +
+  tmp="$(mktemp -d "$parent/.ltx-source.XXXXXX")"
+  if ! curl --fail --location --retry 4 --retry-all-errors \
+    --connect-timeout 20 --max-time "$LTX_SOURCE_TIMEOUT_SECONDS" \
+    "https://codeload.github.com/Lightricks/LTX-2/tar.gz/${LTX_REF}" \
+    -o "$tmp/source.tar.gz"; then
+    rm -rf -- "$tmp"
+    return 1
   fi
-  timeout --foreground "$GIT_CLONE_TIMEOUT_SECONDS" \
-    git clone --progress --depth 1 --branch "$LTX_REF" \
-    https://github.com/Lightricks/LTX-2.git "$LTX_ROOT"
+  if ! tar -xzf "$tmp/source.tar.gz" -C "$tmp"; then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  extracted="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -name 'LTX-2-*' -print -quit)"
+  [[ -n "$extracted" && -f "$extracted/pyproject.toml" && -d "$extracted/packages/ltx-pipelines" ]] || {
+    rm -rf -- "$tmp"
+    return 1
+  }
+  rm -rf -- "$LTX_ROOT"
+  mv -- "$extracted" "$LTX_ROOT"
+  printf '%s\n' "$LTX_REF" > "$LTX_SOURCE_MARKER"
+  rm -rf -- "$tmp"
 }
 
 model_cache_complete() {
@@ -86,13 +112,13 @@ if [[ "${TEST_MODE:-0}" == 1 ]]; then
   exit 0
 fi
 
-stage clone_ltx_repo
-if [[ ! -d "$LTX_ROOT/.git" ]]; then
-  retry git_clone clone_ltx_repo
+stage fetch_ltx_source
+if ! ltx_source_complete; then
+  retry ltx_source_archive fetch_ltx_source_archive
 fi
 
 stage resolve_ltx_revision
-git -C "$LTX_ROOT" rev-parse HEAD > "$STATE_DIR/ltx.commit"
+printf '%s\n' "$LTX_REF" > "$STATE_DIR/ltx.revision"
 
 cd "$LTX_ROOT"
 if [[ -f "$STATE_DIR/ltx-runtime.ready" ]]; then
