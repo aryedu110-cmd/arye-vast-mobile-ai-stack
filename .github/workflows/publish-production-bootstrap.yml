@@ -31,7 +31,7 @@ jobs:
           file: production-bootstrap/Dockerfile
           push: true
           tags: |
-            ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-5
+            ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-6
             ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-4
             ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-latest
           cache-from: type=gha
@@ -39,5 +39,5 @@ jobs:
       - name: Verify Vast can pull without GitHub credentials
         run: |
           docker logout ghcr.io
-          docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-5
+          docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-6
           docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-4
