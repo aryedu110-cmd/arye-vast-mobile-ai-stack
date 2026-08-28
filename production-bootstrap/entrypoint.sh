@@ -83,7 +83,7 @@ stage start_ltx_setup
 SETUP_PID=$!
 
 report_setup() {
-  local last="" current="" setup_status=0
+  local last="" current="" setup_status=0 stop_requested_epoch=""
   while kill -0 "$SETUP_PID" 2>/dev/null; do
     current="$(cat "$STATE_DIR/setup.stage" 2>/dev/null || true)"
     if [[ -n "$current" && "$current" != "$last" ]]; then
@@ -106,9 +106,17 @@ report_setup() {
   printf 'SETUP_DIAGNOSTIC_END\n' >&2
   if [[ "${AUTO_STOP_ON_SETUP_FAILURE:-1}" == 1 ]]; then
     if /opt/arye-production/self_stop.sh setup_failed; then
-      # Keep the container alive while Vast applies the stop request. Exiting
-      # here can trigger the platform restart policy and repeat a failed setup.
-      while :; do sleep 3600; done
+      # Give Vast time to power the instance off without allowing the Docker
+      # restart policy to repeat a failed setup.  This hold is deliberately
+      # bounded by wall-clock time: if the stopped instance is started again,
+      # the old process exits after the deadline and Docker launches a clean
+      # entrypoint that can resume cached Hugging Face downloads.
+      local hold_limit="${AUTO_STOP_HOLD_MAX_SECONDS:-180}"
+      [[ "$hold_limit" =~ ^[1-9][0-9]*$ ]] || hold_limit=180
+      stop_requested_epoch="$(date +%s)"
+      printf 'AUTO_STOP_HOLD=ARMED MAX_SECONDS=%s\n' "$hold_limit"
+      while (( $(date +%s) - stop_requested_epoch < hold_limit )); do sleep 5; done
+      printf 'AUTO_STOP_HOLD=COMPLETE ACTION=EXIT_FOR_CLEAN_RESTART\n'
     fi
   fi
   return "$setup_status"
