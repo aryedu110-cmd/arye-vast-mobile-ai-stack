@@ -7,6 +7,8 @@ readonly HEALTH_JSON='{"ok":true,"service":"arye-ltx-production-bootstrap"}'
 CURRENT_STAGE=bootstrap
 HEALTH_PID=""
 TUNNEL_PID=""
+SETUP_PID=""
+REPORTER_PID=""
 
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"
@@ -15,12 +17,16 @@ stage() { CURRENT_STAGE="$1"; printf 'STAGE=%s\n' "$CURRENT_STAGE"; }
 cleanup() {
   [[ -n "$TUNNEL_PID" ]] && kill "$TUNNEL_PID" 2>/dev/null || true
   [[ -n "$HEALTH_PID" ]] && kill "$HEALTH_PID" 2>/dev/null || true
+  [[ -n "$REPORTER_PID" ]] && kill "$REPORTER_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 stage arm_safety
 if [[ "${TEST_MODE:-0}" == 1 ]]; then
   TEST_LIMIT_SECONDS="${TEST_LIMIT_SECONDS:-360}" /opt/arye-production/arm_watchdog.sh \
+    > "$STATE_DIR/watchdog.log" 2>&1 &
+elif [[ -n "${AUTO_STOP_SECONDS:-}" ]]; then
+  TEST_LIMIT_SECONDS="$AUTO_STOP_SECONDS" /opt/arye-production/arm_watchdog.sh \
     > "$STATE_DIR/watchdog.log" 2>&1 &
 fi
 
@@ -74,8 +80,34 @@ printf 'READY\n'
 
 stage start_ltx_setup
 /opt/arye-production/bootstrap_ltx.sh > "$STATE_DIR/setup.log" 2>&1 &
+SETUP_PID=$!
+
+report_setup() {
+  local last="" current="" setup_status=0
+  while kill -0 "$SETUP_PID" 2>/dev/null; do
+    current="$(cat "$STATE_DIR/setup.stage" 2>/dev/null || true)"
+    if [[ -n "$current" && "$current" != "$last" ]]; then
+      printf 'SETUP_STAGE=%s\n' "$current"
+      last="$current"
+    fi
+    sleep 2
+  done
+  wait "$SETUP_PID" || setup_status=$?
+  current="$(cat "$STATE_DIR/setup.stage" 2>/dev/null || true)"
+  if [[ -n "$current" && "$current" != "$last" ]]; then printf 'SETUP_STAGE=%s\n' "$current"; fi
+  if (( setup_status == 0 )); then
+    printf 'SETUP_RESULT=READY\n'
+    return 0
+  fi
+  printf 'SETUP_RESULT=FAILED CODE=%s\n' "$setup_status" >&2
+  if [[ "${AUTO_STOP_ON_SETUP_FAILURE:-1}" == 1 ]]; then
+    /opt/arye-production/self_stop.sh setup_failed || true
+  fi
+  return "$setup_status"
+}
+report_setup &
+REPORTER_PID=$!
 
 stage supervise
 while kill -0 "$HEALTH_PID" 2>/dev/null && kill -0 "$TUNNEL_PID" 2>/dev/null; do sleep 2; done
 exit 1
-

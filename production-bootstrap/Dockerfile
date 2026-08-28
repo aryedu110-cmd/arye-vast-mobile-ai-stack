@@ -7,11 +7,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ARYE_STATE_DIR=/workspace/arye-production/state \
     ARYE_HEALTH_PORT=8787 \
     LTX_ROOT=/workspace/arye-production/repos/LTX-2 \
-    MODEL_ROOT=/workspace/arye-production/models/ltx-2.5
+    MODEL_ROOT=/workspace/arye-production/models/ltx-2.5 \
+    OPENMONTAGE_ROOT=/workspace/arye-production/repos/OpenMontage \
+    PROJECT_ROOT=/workspace/projects/why-math-matters \
+    HF_HOME=/workspace/arye-production/hf-cache
 
 RUN apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends \
-      ca-certificates curl ffmpeg git git-lfs jq nodejs npm \
+      build-essential ca-certificates curl ffmpeg git git-lfs jq make nodejs npm rsync unzip \
       python3 python3-pip python3-venv \
     && curl --fail --location --silent --show-error \
       "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" \
@@ -22,9 +25,8 @@ RUN apt-get update -qq \
       'uv==0.8.14' 'huggingface_hub==0.34.4' \
     && rm -rf /var/lib/apt/lists/*
 
-COPY entrypoint.sh health_server.py bootstrap_ltx.sh self_stop.sh arm_watchdog.sh /opt/arye-production/
+COPY entrypoint.sh health_server.py bootstrap_ltx.sh install_openmontage.sh run_ltx_clip.sh self_stop.sh arm_watchdog.sh /opt/arye-production/
 RUN chmod 0755 /opt/arye-production/*.sh \
     && python3 -m py_compile /opt/arye-production/health_server.py
 
 ENTRYPOINT ["/opt/arye-production/entrypoint.sh"]
-
