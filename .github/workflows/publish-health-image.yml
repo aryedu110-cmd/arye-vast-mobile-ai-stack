@@ -53,3 +53,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=health-image
           provenance: true
           sbom: true
+
+      - name: Verify anonymous pull
+        run: |
+          docker logout ghcr.io
+          docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:1
