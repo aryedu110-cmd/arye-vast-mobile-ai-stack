@@ -19,6 +19,10 @@ required_files=(
 [[ -s "$STATE_DIR/runtime-check.txt" ]]
 grep -Fqx 'LTX_DISTILLED_MODULE=READY' "$STATE_DIR/distilled-module-check.txt"
 grep -Fqx 'OPENMONTAGE_IMPORT=READY' "$STATE_DIR/openmontage-check.txt"
+grep -Fqx 'MUSETALK_RUNTIME=READY' "$STATE_DIR/musetalk-check.txt"
+grep -Fqx 'CHATTERBOX_HEBREW=READY' "$STATE_DIR/chatterbox-check.txt"
+[[ -f "$STATE_DIR/musetalk.ready" ]]
+[[ -f "$STATE_DIR/chatterbox.ready" ]]
 
 for file in "${required_files[@]}"; do
   [[ -s "$file" ]] || { printf 'MISSING_OR_EMPTY=%s\n' "$file" >&2; exit 1; }

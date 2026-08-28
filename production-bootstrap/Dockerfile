@@ -25,7 +25,7 @@ RUN apt-get update -qq \
       'uv==0.8.14' 'huggingface_hub==0.34.4' \
     && rm -rf /var/lib/apt/lists/*
 
-COPY entrypoint.sh health_server.py bootstrap_ltx.sh install_openmontage.sh run_ltx_clip.sh verify_ready_state.sh self_stop.sh arm_watchdog.sh /opt/arye-production/
+COPY entrypoint.sh health_server.py bootstrap_ltx.sh install_openmontage.sh install_musetalk.sh install_chatterbox.sh run_ltx_clip.sh verify_ready_state.sh self_stop.sh arm_watchdog.sh /opt/arye-production/
 RUN chmod 0755 /opt/arye-production/*.sh \
     && python3 -m py_compile /opt/arye-production/health_server.py
 

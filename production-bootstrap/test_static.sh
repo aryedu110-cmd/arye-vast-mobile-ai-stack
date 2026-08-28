@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for file in entrypoint.sh bootstrap_ltx.sh install_openmontage.sh run_ltx_clip.sh verify_ready_state.sh self_stop.sh arm_watchdog.sh; do
+for file in entrypoint.sh bootstrap_ltx.sh install_openmontage.sh install_musetalk.sh install_chatterbox.sh run_ltx_clip.sh verify_ready_state.sh self_stop.sh arm_watchdog.sh; do
   bash -n "$HERE/$file"
   ! grep -Eq '^[[:space:]]*set[[:space:]]+-[^[:space:]]*x' "$HERE/$file"
 done
@@ -40,6 +40,8 @@ grep -Fq 'uv run --no-sync python -c' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'LTX_DISTILLED_MODULE=READY' "$HERE/bootstrap_ltx.sh"
 ! grep -Fq 'python -m ltx_pipelines.distilled --help' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'stage verify_openmontage_runtime' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'stage install_musetalk' "$HERE/bootstrap_ltx.sh"
+grep -Fq 'stage install_chatterbox' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'cd "$OPENMONTAGE_ROOT"' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'OPENMONTAGE_IMPORT=READY' "$HERE/bootstrap_ltx.sh"
 ! grep -Fq 'registry.discover()' "$HERE/bootstrap_ltx.sh"
@@ -48,6 +50,11 @@ grep -Fq 'Width/height must divide by 32' "$HERE/run_ltx_clip.sh"
 grep -Fq 'READY_STATE=VALID' "$HERE/verify_ready_state.sh"
 grep -Fq 'LTX_DISTILLED_MODULE=READY' "$HERE/verify_ready_state.sh"
 grep -Fq 'OPENMONTAGE_IMPORT=READY' "$HERE/verify_ready_state.sh"
+grep -Fq 'MUSETALK_RUNTIME=READY' "$HERE/verify_ready_state.sh"
+grep -Fq 'CHATTERBOX_HEBREW=READY' "$HERE/verify_ready_state.sh"
+grep -Fq 'dicta-1.0.int8.onnx' "$HERE/install_chatterbox.sh"
+grep -Fq 't3_mtl23ls_v3.safetensors' "$HERE/install_chatterbox.sh"
+grep -Fq 'musetalkV15/unet.pth' "$HERE/install_musetalk.sh"
 grep -Fq "name '*.incomplete'" "$HERE/verify_ready_state.sh"
 grep -Fq 'verify_ready_state.sh' "$HERE/Dockerfile"
 grep -Fq 'SETUP_RESULT=READY' "$HERE/entrypoint.sh"

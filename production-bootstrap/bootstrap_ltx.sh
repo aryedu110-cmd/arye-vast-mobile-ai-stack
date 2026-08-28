@@ -112,6 +112,12 @@ else
   touch "$STATE_DIR/openmontage-runtime.ready"
 fi
 
+stage install_musetalk
+/opt/arye-production/install_musetalk.sh
+
+stage install_chatterbox
+/opt/arye-production/install_chatterbox.sh
+
 stage download_ltx25_models
 hf download Lightricks/LTX-2.5 \
   diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors \
