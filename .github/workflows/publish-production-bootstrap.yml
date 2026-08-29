@@ -2,7 +2,7 @@ name: Build Production-18 release candidate
 
 on:
   push:
-    branches: [production-18-build]
+    branches: [production-18-build-rc3]
     paths:
       - "production-bootstrap/**"
       - ".github/workflows/publish-production-bootstrap.yml"
