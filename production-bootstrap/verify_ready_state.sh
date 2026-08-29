@@ -1,36 +1,20 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-
 readonly STATE_DIR="${ARYE_STATE_DIR:-/workspace/arye-production/state}"
 readonly MODEL_ROOT="${MODEL_ROOT:-/workspace/arye-production/models/ltx-2.5}"
-
-required_files=(
-  "$MODEL_ROOT/diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors"
-  "$MODEL_ROOT/text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors"
-  "$MODEL_ROOT/vae/ltx-2.5-video-vae-bf16.safetensors"
-  "$MODEL_ROOT/vae/ltx-2.5-audio-vae-bf16.safetensors"
-  "$MODEL_ROOT/model_patches/ltx-2.5-duration-head-bf16.safetensors"
-  "$MODEL_ROOT/latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
-  "$MODEL_ROOT/loras/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors"
-)
-
-[[ -f "$STATE_DIR/stack.ready" ]]
+readonly LTX_ROOT="${LTX_ROOT:-/workspace/arye-production/repos/LTX-2}"
 [[ -f "$STATE_DIR/ltx-core.ready" ]]
-[[ -s "$STATE_DIR/runtime-check.txt" ]]
-grep -Fqx 'LTX_DISTILLED_MODULE=READY' "$STATE_DIR/distilled-module-check.txt"
-grep -Fqx 'OPENMONTAGE_IMPORT=READY' "$STATE_DIR/openmontage-check.txt"
-
-for file in "${required_files[@]}"; do
-  [[ -s "$file" ]] || { printf 'MISSING_OR_EMPTY=%s\n' "$file" >&2; exit 1; }
+[[ -f "$STATE_DIR/gpu-gates.ready" ]]
+[[ -f "$STATE_DIR/stack.ready" ]]
+[[ -s "$STATE_DIR/host-preflight.json" && -s "$STATE_DIR/runtime-preflight.json" && -s "$STATE_DIR/model-preflight.json" ]]
+[[ -s "$STATE_DIR/ltx-runtime.fingerprint" && -x "$LTX_ROOT/.venv/bin/python" ]]
+jq -e '.ok == true' "$STATE_DIR/host-preflight.json" >/dev/null
+jq -e '.ok == true' "$STATE_DIR/runtime-preflight.json" >/dev/null
+jq -e '.ok == true' "$STATE_DIR/model-preflight.json" >/dev/null
+/opt/arye-production/runtime_preflight.py models --model-root "$MODEL_ROOT" >/dev/null
+for gate in tiny_distilled tiny_dfr production_shape C01_full_dfr; do
+  jq -e '.ok == true and (.sha256 | length == 64)' "$STATE_DIR/gates/${gate}.json" >/dev/null
 done
-
-if find "$MODEL_ROOT" -type f -name '*.incomplete' -print -quit | grep -q .; then
-  printf 'INCOMPLETE_DOWNLOADS=YES\n' >&2
-  exit 1
-fi
-
-printf 'READY_STATE=VALID\n'
-printf 'SETUP_STAGE=%s\n' "$(cat "$STATE_DIR/setup.stage" 2>/dev/null || printf unknown)"
-printf 'MODEL_FILES=%s\n' "${#required_files[@]}"
-printf 'MUSETALK_STATUS=%s\n' "$(cat "$STATE_DIR/musetalk.status" 2>/dev/null || printf pending)"
-printf 'CHATTERBOX_STATUS=%s\n' "$(cat "$STATE_DIR/chatterbox.status" 2>/dev/null || printf pending)"
+printf 'READY_STATE=VALID_PRODUCTION_18\n'
+printf 'LTX_REVISION=%s\n' "$(<"$STATE_DIR/ltx.revision")"
+printf 'MODEL_REVISION=%s\n' "$(<"$STATE_DIR/model.revision")"

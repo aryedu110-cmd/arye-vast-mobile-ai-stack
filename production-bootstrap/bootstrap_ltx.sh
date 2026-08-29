@@ -4,22 +4,23 @@ set -Eeuo pipefail
 readonly STATE_DIR="${ARYE_STATE_DIR:-/workspace/arye-production/state}"
 readonly LTX_ROOT="${LTX_ROOT:-/workspace/arye-production/repos/LTX-2}"
 readonly MODEL_ROOT="${MODEL_ROOT:-/workspace/arye-production/models/ltx-2.5}"
-readonly OPENMONTAGE_ROOT="${OPENMONTAGE_ROOT:-/workspace/arye-production/repos/OpenMontage}"
 readonly PROJECT_ROOT="${PROJECT_ROOT:-/workspace/projects/why-math-matters}"
-readonly LTX_REF="${LTX_REF:-main}"
-readonly LTX_SOURCE_TIMEOUT_SECONDS="${LTX_SOURCE_TIMEOUT_SECONDS:-300}"
-readonly UV_SYNC_TIMEOUT_SECONDS="${UV_SYNC_TIMEOUT_SECONDS:-1200}"
-readonly LTX_VERIFY_TIMEOUT_SECONDS="${LTX_VERIFY_TIMEOUT_SECONDS:-60}"
-readonly MODEL_DOWNLOAD_TIMEOUT_SECONDS="${MODEL_DOWNLOAD_TIMEOUT_SECONDS:-1800}"
+readonly LTX_REF="${LTX_REF:-a95ab856bf29407b6b066ede0abe1846050db56c}"
+readonly LTX_MODEL_REVISION="${LTX_MODEL_REVISION:-bf86adedf518142442575d1ce2e767b7d01c8c76}"
+readonly LTX_DETAILING_REVISION="${LTX_DETAILING_REVISION:-74c4e68ee7dd99f3997d5a1bb1a3784941822222}"
+readonly LTX_SOURCE_TIMEOUT_SECONDS="${LTX_SOURCE_TIMEOUT_SECONDS:-600}"
+readonly UV_SYNC_TIMEOUT_SECONDS="${UV_SYNC_TIMEOUT_SECONDS:-3600}"
+readonly MODEL_DOWNLOAD_TIMEOUT_SECONDS="${MODEL_DOWNLOAD_TIMEOUT_SECONDS:-7200}"
 readonly NETWORK_RETRY_ATTEMPTS="${NETWORK_RETRY_ATTEMPTS:-3}"
-readonly INITIAL_SETUP_MIN_FREE_GB="${INITIAL_SETUP_MIN_FREE_GB:-200}"
-readonly READY_SETUP_MIN_FREE_GB="${READY_SETUP_MIN_FREE_GB:-32}"
+readonly READY_SETUP_MIN_FREE_GB="${READY_SETUP_MIN_FREE_GB:-50}"
 readonly LTX_SOURCE_MARKER="$LTX_ROOT/.arye-source-ref"
+readonly RUNTIME_MARKER="$STATE_DIR/ltx-runtime.fingerprint"
 
 readonly REQUIRED_MODEL_FILES=(
   "diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors"
   "text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors"
   "vae/ltx-2.5-video-vae-bf16.safetensors"
+  "vae/ltx-2.5-video-vae-conv-bf16.safetensors"
   "vae/ltx-2.5-audio-vae-bf16.safetensors"
   "model_patches/ltx-2.5-duration-head-bf16.safetensors"
   "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
@@ -30,147 +31,104 @@ mkdir -p "$STATE_DIR" "$(dirname "$LTX_ROOT")" "$MODEL_ROOT" "$PROJECT_ROOT"/{in
 umask 077
 rm -f "$STATE_DIR/setup.failed" "$STATE_DIR/stack.ready" "$STATE_DIR/ltx-core.ready"
 stage() { printf '%s\n' "$1" > "$STATE_DIR/setup.stage"; printf 'SETUP_STAGE=%s\n' "$1"; }
-failed() { touch "$STATE_DIR/setup.failed"; stage failed; }
+failed() { touch "$STATE_DIR/setup.failed"; printf 'failed\n' > "$STATE_DIR/setup.stage"; }
 trap failed ERR
 
 retry() {
-  local attempt=1
-  local status=0
-  while (( attempt <= NETWORK_RETRY_ATTEMPTS )); do
-    printf 'ATTEMPT=%s/%s COMMAND=%s\n' "$attempt" "$NETWORK_RETRY_ATTEMPTS" "$1"
-    if "${@:2}"; then
-      return 0
-    else
-      status=$?
-    fi
-    printf 'RETRY_PENDING=%s EXIT_CODE=%s\n' "$1" "$status" >&2
-    (( attempt++ ))
-    sleep 5
+  local label="$1" status=0
+  shift
+  for ((attempt=1; attempt<=NETWORK_RETRY_ATTEMPTS; attempt++)); do
+    printf 'ATTEMPT=%s/%s TASK=%s\n' "$attempt" "$NETWORK_RETRY_ATTEMPTS" "$label"
+    if "$@"; then return 0; else status=$?; fi
+    sleep $((attempt * 5))
   done
   return "$status"
 }
 
-ltx_source_complete() {
-  [[ -f "$LTX_SOURCE_MARKER" ]] || return 1
-  [[ "$(<"$LTX_SOURCE_MARKER")" == "$LTX_REF" ]] || return 1
-  [[ -f "$LTX_ROOT/pyproject.toml" && -d "$LTX_ROOT/packages/ltx-pipelines" ]]
-}
-
-fetch_ltx_source_archive() {
-  local parent tmp extracted
-  parent="$(dirname "$LTX_ROOT")"
-  mkdir -p "$parent"
-  find "$parent" -mindepth 1 -maxdepth 1 -type d -name '.ltx-source.*' -exec rm -rf -- {} +
-  tmp="$(mktemp -d "$parent/.ltx-source.XXXXXX")"
-  if ! curl --fail --location --retry 4 --retry-all-errors \
-    --connect-timeout 20 --max-time "$LTX_SOURCE_TIMEOUT_SECONDS" \
-    "https://codeload.github.com/Lightricks/LTX-2/tar.gz/${LTX_REF}" \
-    -o "$tmp/source.tar.gz"; then
-    rm -rf -- "$tmp"
-    return 1
-  fi
-  if ! tar -xzf "$tmp/source.tar.gz" -C "$tmp"; then
-    rm -rf -- "$tmp"
-    return 1
-  fi
-  extracted="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -name 'LTX-2-*' -print -quit)"
-  [[ -n "$extracted" && -f "$extracted/pyproject.toml" && -d "$extracted/packages/ltx-pipelines" ]] || {
-    rm -rf -- "$tmp"
-    return 1
-  }
-  rm -rf -- "$LTX_ROOT"
-  mv -- "$extracted" "$LTX_ROOT"
-  printf '%s\n' "$LTX_REF" > "$LTX_SOURCE_MARKER"
-  rm -rf -- "$tmp"
-}
-
-model_cache_complete() {
-  local relative_path
-  for relative_path in "${REQUIRED_MODEL_FILES[@]}"; do
-    [[ -s "$MODEL_ROOT/$relative_path" ]] || return 1
-  done
+model_files_present() {
+  local relative
+  for relative in "${REQUIRED_MODEL_FILES[@]}"; do [[ -s "$MODEL_ROOT/$relative" ]] || return 1; done
   ! find "$MODEL_ROOT" -type f -name '*.incomplete' -print -quit | grep -q .
 }
 
-stage validate_host
-command -v nvidia-smi >/dev/null
-nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits > "$STATE_DIR/gpu.txt"
-awk -F, 'NR==1 {gsub(/ /,"",$2); if ($2+0 < 32000) exit 1}' "$STATE_DIR/gpu.txt"
-free_kb="$(df -Pk /workspace | awk 'NR==2 {print $4}')"
-if model_cache_complete; then
-  required_free_gb="$READY_SETUP_MIN_FREE_GB"
-  printf 'MODEL_CACHE=COMPLETE MIN_FREE_GB=%s\n' "$required_free_gb"
-else
-  required_free_gb="$INITIAL_SETUP_MIN_FREE_GB"
-  printf 'MODEL_CACHE=INCOMPLETE MIN_FREE_GB=%s\n' "$required_free_gb"
-fi
-[[ "$required_free_gb" =~ ^[1-9][0-9]*$ ]]
-(( free_kb >= required_free_gb * 1024 * 1024 ))
+source_complete() {
+  [[ -f "$LTX_SOURCE_MARKER" && "$(<"$LTX_SOURCE_MARKER")" == "$LTX_REF" ]]
+  [[ -f "$LTX_ROOT/pyproject.toml" && -f "$LTX_ROOT/packages/ltx-pipelines/src/ltx_pipelines/dfr_pipeline.py" ]]
+}
 
+fetch_source() {
+  local parent tmp extracted
+  parent="$(dirname "$LTX_ROOT")"
+  tmp="$(mktemp -d "$parent/.ltx-source.XXXXXX")"
+  trap 'rm -rf -- "$tmp"' RETURN
+  curl --fail --location --retry 4 --retry-all-errors --connect-timeout 20 \
+    --max-time "$LTX_SOURCE_TIMEOUT_SECONDS" "https://codeload.github.com/Lightricks/LTX-2/tar.gz/${LTX_REF}" -o "$tmp/source.tar.gz"
+  tar -xzf "$tmp/source.tar.gz" -C "$tmp"
+  extracted="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -name 'LTX-2-*' -print -quit)"
+  [[ -n "$extracted" && -f "$extracted/pyproject.toml" ]]
+  rm -rf -- "$LTX_ROOT"
+  mv -- "$extracted" "$LTX_ROOT"
+  printf '%s\n' "$LTX_REF" > "$LTX_SOURCE_MARKER"
+  rm -f "$RUNTIME_MARKER"
+  trap - RETURN
+  rm -rf -- "$tmp"
+}
+
+runtime_source_fingerprint() {
+  { printf '%s\n' "$LTX_REF"; find "$LTX_ROOT" -name pyproject.toml -type f -print0 | sort -z | xargs -0 sha256sum; } | sha256sum | awk '{print $1}'
+}
+
+stage validate_host
 if [[ "${TEST_MODE:-0}" == 1 ]]; then
-  touch "$STATE_DIR/test-host.ready"
+  printf '{"ok":true,"mode":"test"}\n' > "$STATE_DIR/host-preflight.json"
   stage test_host_validated_no_models
   exit 0
 fi
+/opt/arye-production/runtime_preflight.py host > "$STATE_DIR/host-preflight.json"
 
-stage fetch_ltx_source
-if ! ltx_source_complete; then
-  retry ltx_source_archive fetch_ltx_source_archive
-fi
-
-stage resolve_ltx_revision
+stage fetch_pinned_ltx_source
+if ! source_complete; then retry ltx_source fetch_source; fi
 printf '%s\n' "$LTX_REF" > "$STATE_DIR/ltx.revision"
 
-cd "$LTX_ROOT"
-if [[ -f "$STATE_DIR/ltx-runtime.ready" ]]; then
-  stage ltx_runtime_cached
-else
-  stage sync_ltx_dependencies
-  UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-60}" \
-    timeout --foreground "$UV_SYNC_TIMEOUT_SECONDS" uv sync --extra natten
-  touch "$STATE_DIR/ltx-runtime.ready"
+stage sync_ltx_runtime
+expected_fingerprint="$(runtime_source_fingerprint)"
+if [[ ! -x "$LTX_ROOT/.venv/bin/python" || ! -s "$RUNTIME_MARKER" || "$(cut -d' ' -f1 "$RUNTIME_MARKER")" != "$expected_fingerprint" ]]; then
+  cd "$LTX_ROOT"
+  timeout --foreground "$UV_SYNC_TIMEOUT_SECONDS" uv sync --extra natten
+  .venv/bin/python -m pip --version >/dev/null 2>&1 || true
+  freeze_hash="$(uv pip freeze --python .venv/bin/python | LC_ALL=C sort | tee "$STATE_DIR/ltx-runtime.freeze" | sha256sum | awk '{print $1}')"
+  printf '%s %s\n' "$expected_fingerprint" "$freeze_hash" > "$RUNTIME_MARKER"
 fi
 
-if [[ -f "$STATE_DIR/openmontage-runtime.ready" ]]; then
-  stage openmontage_runtime_cached
-else
-  stage install_openmontage
-  /opt/arye-production/install_openmontage.sh
-  touch "$STATE_DIR/openmontage-runtime.ready"
+stage verify_runtime_and_cli_contract
+/opt/arye-production/runtime_preflight.py runtime > "$STATE_DIR/runtime-preflight.json"
+
+stage download_pinned_models
+if ! model_files_present; then
+  retry ltx_models timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" hf download Lightricks/LTX-2.5 \
+    --revision "$LTX_MODEL_REVISION" \
+    diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors \
+    text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors \
+    vae/ltx-2.5-video-vae-bf16.safetensors \
+    vae/ltx-2.5-video-vae-conv-bf16.safetensors \
+    vae/ltx-2.5-audio-vae-bf16.safetensors \
+    model_patches/ltx-2.5-duration-head-bf16.safetensors \
+    latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors \
+    --local-dir "$MODEL_ROOT"
+  retry detailing_lora timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" hf download \
+    Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler \
+    --revision "$LTX_DETAILING_REVISION" \
+    ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors --local-dir "$MODEL_ROOT/loras"
 fi
+printf '%s\n' "$LTX_MODEL_REVISION" > "$STATE_DIR/model.revision"
+printf '%s\n' "$LTX_DETAILING_REVISION" > "$STATE_DIR/detailing-lora.revision"
 
-stage download_ltx25_models
-retry ltx25_models timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" hf download Lightricks/LTX-2.5 \
-  diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors \
-  text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors \
-  vae/ltx-2.5-video-vae-bf16.safetensors \
-  vae/ltx-2.5-audio-vae-bf16.safetensors \
-  model_patches/ltx-2.5-duration-head-bf16.safetensors \
-  latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors \
-  --local-dir "$MODEL_ROOT"
+stage validate_model_integrity
+/opt/arye-production/runtime_preflight.py models > "$STATE_DIR/model-preflight.json"
+free_kb="$(df -Pk /workspace | awk 'NR==2 {print $4}')"
+(( free_kb >= READY_SETUP_MIN_FREE_GB * 1024 * 1024 ))
 
-stage download_dfr_detailing_lora
-retry dfr_detailing_lora timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" hf download Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler \
-  ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors \
-  --local-dir "$MODEL_ROOT/loras"
-
-stage verify_ltx_cuda
-timeout --foreground "$LTX_VERIFY_TIMEOUT_SECONDS" \
-  uv run --no-sync python -c 'import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))' \
-  > "$STATE_DIR/runtime-check.txt" 2>&1
-
-stage verify_ltx_distilled_cli
-timeout --foreground "$LTX_VERIFY_TIMEOUT_SECONDS" \
-  uv run --no-sync python -c \
-    'import importlib.util; assert importlib.util.find_spec("ltx_pipelines.distilled") is not None; print("LTX_DISTILLED_MODULE=READY")' \
-  > "$STATE_DIR/distilled-module-check.txt" 2>&1
-
-stage verify_openmontage_runtime
-(
-  cd "$OPENMONTAGE_ROOT"
-  .venv/bin/python -c 'from tools.tool_registry import registry; assert registry is not None; print("OPENMONTAGE_IMPORT=READY")'
-) > "$STATE_DIR/openmontage-check.txt" 2>&1
-
+# Core-ready means static/runtime/model validation passed. GPU render gates create
+# gpu-gates.ready separately; queue execution remains locked until then.
 touch "$STATE_DIR/ltx-core.ready"
-touch "$STATE_DIR/stack.ready"
-stage ready_for_ltx_generation
+stage awaiting_gpu_render_gates
