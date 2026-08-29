@@ -21,6 +21,32 @@ grep -Fq 'runtime_preflight.py runtime' "$HERE/bootstrap_ltx.sh"
 grep -Fq 'AUTO_STOP_SECONDS is required' "$HERE/entrypoint.sh"
 grep -Fq 'env -u TEST_LIMIT_SECONDS AUTO_STOP_SECONDS="$AUTO_STOP_SECONDS"' "$HERE/entrypoint.sh"
 grep -Fq 'LIMIT_SECONDS="${AUTO_STOP_SECONDS:-${TEST_LIMIT_SECONDS:-360}}"' "$HERE/arm_watchdog.sh"
+grep -Fq 'absolute_stop_instance_id' "$HERE/arm_watchdog.sh"
+grep -Fq '"$(<"$INSTANCE_FILE")" == "$CONTAINER_ID"' "$HERE/arm_watchdog.sh"
+
+watchdog_state="$(mktemp -d)"
+trap 'rm -rf -- "$watchdog_state"' EXIT
+printf '%s\n' 4102444800 > "$watchdog_state/absolute_stop_epoch"
+printf '%s\n' 111 > "$watchdog_state/absolute_stop_instance_id"
+set +e
+ARYE_STATE_DIR="$watchdog_state" CONTAINER_ID=111 AUTO_STOP_SECONDS=25200 \
+  timeout 1 "$HERE/arm_watchdog.sh" > "$watchdog_state/reuse.log" 2>&1
+reuse_status=$?
+set -e
+[[ "$reuse_status" == 124 ]]
+grep -Fq 'INSTANCE_ID=111 DEADLINE_EPOCH=4102444800' "$watchdog_state/reuse.log"
+
+printf '%s\n' 1 > "$watchdog_state/absolute_stop_epoch"
+printf '%s\n' 111 > "$watchdog_state/absolute_stop_instance_id"
+set +e
+ARYE_STATE_DIR="$watchdog_state" CONTAINER_ID=222 AUTO_STOP_SECONDS=25200 \
+  timeout 1 "$HERE/arm_watchdog.sh" > "$watchdog_state/reset.log" 2>&1
+reset_status=$?
+set -e
+[[ "$reset_status" == 124 ]]
+[[ "$(<"$watchdog_state/absolute_stop_instance_id")" == 222 ]]
+[[ "$(<"$watchdog_state/absolute_stop_epoch")" -gt "$(date +%s)" ]]
+grep -Fq 'INSTANCE_ID=222' "$watchdog_state/reset.log"
 grep -Fq 'PAID_EXECUTION_APPROVED=1 is required' "$HERE/entrypoint.sh"
 grep -Fq 'balance_watchdog.py' "$HERE/entrypoint.sh"
 grep -Fq 'balance_reserve_reached' "$HERE/balance_watchdog.py"
