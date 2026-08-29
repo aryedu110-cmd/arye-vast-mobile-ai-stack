@@ -55,6 +55,17 @@ class Production18Tests(unittest.TestCase):
         with self.assertRaises(KeyError):
             watchdog.extract_balance({})
 
+    def test_conservative_budget_reserves_bandwidth_and_runtime_cost(self):
+        watchdog = module("balance_watchdog_budget_test", "balance_watchdog.py")
+        self.assertEqual(
+            watchdog.estimated_credit(Decimal("5.84"), Decimal("0.6833333333333333"), 3600, Decimal("1.50")),
+            Decimal("3.6566666666666667"),
+        )
+        self.assertEqual(
+            watchdog.estimated_credit(Decimal("5.84"), Decimal("0.6833333333333333"), 0, Decimal("1.50")),
+            Decimal("4.34"),
+        )
+
     def test_queue_blocks_identity_board_and_bad_dimensions(self):
         queue = module("queue_worker_test", "queue_worker.py")
         package = self.root / "package"
