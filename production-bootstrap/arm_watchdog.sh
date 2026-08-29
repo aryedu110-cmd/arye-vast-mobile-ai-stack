@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 readonly STATE_DIR="${ARYE_STATE_DIR:-/workspace/arye-production/state}"
-readonly LIMIT_SECONDS="${TEST_LIMIT_SECONDS:-${AUTO_STOP_SECONDS:-360}}"
+# Paid execution must never inherit a short test limit injected by a template,
+# host, or stale environment. AUTO_STOP_SECONDS is the explicitly approved
+# paid deadline and therefore takes precedence whenever it is present.
+readonly LIMIT_SECONDS="${AUTO_STOP_SECONDS:-${TEST_LIMIT_SECONDS:-360}}"
 readonly DEADLINE_FILE="$STATE_DIR/absolute_stop_epoch"
 [[ "$LIMIT_SECONDS" =~ ^[1-9][0-9]*$ ]]
 mkdir -p "$STATE_DIR"
