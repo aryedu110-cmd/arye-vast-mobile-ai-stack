@@ -14,6 +14,7 @@ MIN_DRIVER_MAJOR = 580
 MIN_GPU_MIB = 47_000
 MIN_RAM_GIB = 118
 MIN_DISK_GIB = 200
+DEFAULT_APPROVED_GPU_NAME_REGEX = r"(?:RTX\s*4090|RTX\s*5880\s*Ada|RTX\s*6000\s*Ada)"
 
 
 def run(*args: str) -> str:
@@ -28,16 +29,16 @@ def host() -> dict[str, object]:
     ).splitlines()
     if len(query) != 1:
         raise RuntimeError(f"expected_exactly_one_gpu_got_{len(query)}")
-    name, memory, driver, capability = [item.strip() for item in query[0].split(",")]
+    gpu_name, memory, driver, capability = [item.strip() for item in query[0].split(",")]
     if int(float(memory)) < MIN_GPU_MIB:
         raise RuntimeError(f"gpu_memory_below_{MIN_GPU_MIB}_MiB")
     if int(driver.split(".", 1)[0]) < MIN_DRIVER_MAJOR:
         raise RuntimeError(f"nvidia_driver_below_{MIN_DRIVER_MAJOR}")
     if not capability.startswith("8.9"):
         raise RuntimeError(f"expected_ada_compute_capability_8.9_got_{capability}")
-    approved_gpu = os.environ.get("APPROVED_GPU_NAME_REGEX", r"RTX\s*4090")
-    if not __import__("re").search(approved_gpu, name, __import__("re").I):
-        raise RuntimeError(f"gpu_name_not_approved:{name}")
+    approved_gpu = os.environ.get("APPROVED_GPU_NAME_REGEX", DEFAULT_APPROVED_GPU_NAME_REGEX)
+    if not __import__("re").search(approved_gpu, gpu_name, __import__("re").I):
+        raise RuntimeError(f"gpu_name_not_approved:{gpu_name}")
     ram_gib = int(Path("/proc/meminfo").read_text().split("MemTotal:", 1)[1].split()[0]) // 1024 // 1024
     if ram_gib < MIN_RAM_GIB:
         raise RuntimeError(f"ram_below_{MIN_RAM_GIB}_GiB")
@@ -51,13 +52,13 @@ def host() -> dict[str, object]:
         raise RuntimeError("self_stop_credentials_missing")
     if os.environ.get("PAID_EXECUTION_APPROVED") != "1":
         raise RuntimeError("paid_execution_approval_flag_missing")
-    for name in ("INSTANCE_HOURLY_RATE_USD", "BALANCE_STOP_USD"):
+    for setting_name in ("INSTANCE_HOURLY_RATE_USD", "BALANCE_STOP_USD"):
         try:
-            if float(os.environ[name]) <= 0:
+            if float(os.environ[setting_name]) <= 0:
                 raise ValueError
         except (KeyError, ValueError):
-            raise RuntimeError(f"valid_{name.lower()}_required") from None
-    return {"gpu": name, "memory_mib": int(float(memory)), "driver": driver, "compute_cap": capability, "ram_gib": ram_gib, "disk_free_gib": disk_gib}
+            raise RuntimeError(f"valid_{setting_name.lower()}_required") from None
+    return {"gpu": gpu_name, "memory_mib": int(float(memory)), "driver": driver, "compute_cap": capability, "ram_gib": ram_gib, "disk_free_gib": disk_gib}
 
 
 def safetensors_header(path: Path) -> dict[str, object]:

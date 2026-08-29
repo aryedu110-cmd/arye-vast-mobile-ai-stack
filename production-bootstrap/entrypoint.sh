@@ -92,6 +92,12 @@ fi
 
 # Optional audio/lip-sync installers never start automatically in Production-18.
 stage supervise
-while kill -0 "$HEALTH_PID" 2>/dev/null; do sleep 2; done
+while kill -0 "$HEALTH_PID" 2>/dev/null; do
+  if [[ -n "$BALANCE_PID" ]] && ! kill -0 "$BALANCE_PID" 2>/dev/null; then
+    request_stop balance_monitor_exited
+    exit 1
+  fi
+  sleep 2
+done
 request_stop health_service_failed
 exit 1
