@@ -30,20 +30,61 @@ def stop(reason: str) -> None:
     raise SystemExit(0)
 
 
+def decimal_setting(name: str, *, default: str | None = None) -> Decimal:
+    value = os.environ.get(name, default)
+    if value is None:
+        raise SystemExit(f"{name.lower()}_required")
+    try:
+        parsed = Decimal(value)
+    except InvalidOperation:
+        raise SystemExit(f"valid_{name.lower()}_required") from None
+    if not parsed.is_finite() or parsed < 0:
+        raise SystemExit(f"valid_{name.lower()}_required")
+    return parsed
+
+
+def estimated_credit(starting: Decimal, hourly_rate: Decimal, elapsed_seconds: float, bandwidth_reserve: Decimal) -> Decimal:
+    runtime_cost = hourly_rate * Decimal(str(elapsed_seconds)) / Decimal("3600")
+    return starting - bandwidth_reserve - runtime_cost
+
+
+def write_status(payload: dict[str, object]) -> None:
+    temporary = STATE_DIR / "balance-status.json.tmp"
+    temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    os.replace(temporary, STATE_DIR / "balance-status.json")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check-once", action="store_true")
     args = parser.parse_args()
-    token = os.environ.get("VAST_BALANCE_API_KEY") or os.environ.get("CONTAINER_API_KEY")
-    if not token:
-        raise SystemExit("balance_api_key_missing")
-    try:
-        threshold = Decimal(os.environ["BALANCE_STOP_USD"])
-    except (KeyError, InvalidOperation):
-        raise SystemExit("valid_balance_stop_usd_required") from None
+    # Vast's injected CONTAINER_API_KEY can stop its own instance but is not
+    # authorized to read account credit. Use a separately supplied read token
+    # when available; otherwise enforce a conservative, pre-approved budget.
+    token = os.environ.get("VAST_BALANCE_API_KEY", "").strip()
+    threshold = decimal_setting("BALANCE_STOP_USD")
+    starting = decimal_setting("APPROVED_STARTING_BALANCE_USD") if not token else Decimal("0")
+    hourly_rate = decimal_setting("INSTANCE_HOURLY_RATE_USD") if not token else Decimal("0")
+    bandwidth_reserve = decimal_setting("BANDWIDTH_RESERVE_USD", default="1.50") if not token else Decimal("0")
     if threshold <= 0 or INTERVAL < 30 or MAX_FAILURES < 1:
         raise SystemExit("invalid_balance_watchdog_settings")
+    if not token and (starting <= 0 or hourly_rate <= 0):
+        raise SystemExit("valid_static_budget_inputs_required")
+    if not token and estimated_credit(starting, hourly_rate, 0, bandwidth_reserve) <= threshold:
+        raise SystemExit("insufficient_approved_starting_budget")
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    if not token:
+        started = time.monotonic()
+        while True:
+            elapsed = time.monotonic() - started
+            credit = estimated_credit(starting, hourly_rate, elapsed, bandwidth_reserve)
+            write_status({"ok": True, "mode": "conservative_static_budget", "estimated_credit_usd": str(credit), "stop_threshold_usd": str(threshold), "bandwidth_reserve_usd": str(bandwidth_reserve), "checked_at": int(time.time())})
+            if credit <= threshold:
+                stop("estimated_balance_reserve_reached")
+            if args.check_once:
+                return
+            time.sleep(INTERVAL)
+
     failures = 0
     while True:
         request = urllib.request.Request(
@@ -55,9 +96,7 @@ def main() -> None:
                 payload = json.load(response)
             credit = extract_balance(payload)
             failures = 0
-            temporary = STATE_DIR / "balance-status.json.tmp"
-            temporary.write_text(json.dumps({"ok": True, "credit_usd": str(credit), "stop_threshold_usd": str(threshold), "checked_at": int(time.time())}) + "\n", encoding="utf-8")
-            os.replace(temporary, STATE_DIR / "balance-status.json")
+            write_status({"ok": True, "mode": "live_vast_balance", "credit_usd": str(credit), "stop_threshold_usd": str(threshold), "checked_at": int(time.time())})
             if credit <= threshold:
                 stop("balance_reserve_reached")
             if args.check_once:
