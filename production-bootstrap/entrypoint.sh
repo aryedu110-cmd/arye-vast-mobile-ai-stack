@@ -13,6 +13,14 @@ REPORTER_PID=""
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"
 umask 077
+
+if [[ -s "$STATE_DIR/last_setup_failure.log" ]]; then
+  printf 'PREVIOUS_SETUP_DIAGNOSTIC_BEGIN\n' >&2
+  tail -n 80 "$STATE_DIR/last_setup_failure.log" 2>/dev/null \
+    | awk 'BEGIN { IGNORECASE=1 } /token|password|authorization|api[_-]?key|bearer|hf_[[:alnum:]_-]+/ { print "[REDACTED_SENSITIVE_LINE]"; next } { print }' >&2
+  printf 'PREVIOUS_SETUP_DIAGNOSTIC_END\n' >&2
+fi
+
 stage() { CURRENT_STAGE="$1"; printf 'STAGE=%s\n' "$CURRENT_STAGE"; }
 cleanup() {
   [[ -n "$TUNNEL_PID" ]] && kill "$TUNNEL_PID" 2>/dev/null || true
@@ -87,7 +95,7 @@ stage start_ltx_setup
     | stdbuf -oL awk '
         BEGIN { IGNORECASE=1 }
         /^SETUP_STAGE=/ { next }
-        /token|password|authorization|api[_-]?key|bearer/ {
+        /token|password|authorization|api[_-]?key|bearer|hf_[[:alnum:]_-]+/ {
           print "SETUP_LOG=[REDACTED_SENSITIVE_LINE]";
           next
         }
@@ -113,27 +121,34 @@ report_setup() {
   current="$(cat "$STATE_DIR/setup.stage" 2>/dev/null || true)"
   if [[ -n "$current" && "$current" != "$last" ]]; then printf 'SETUP_STAGE=%s\n' "$current"; fi
   if (( setup_status == 0 )); then
+    rm -f "$STATE_DIR/last_setup_failure.log"
     printf 'SETUP_RESULT=READY\n'
     return 0
   fi
-  printf 'SETUP_RESULT=FAILED CODE=%s\n' "$setup_status" >&2
-  printf 'SETUP_DIAGNOSTIC_BEGIN\n' >&2
-  tail -n 80 "$STATE_DIR/setup.log" 2>/dev/null \
-    | awk 'BEGIN { IGNORECASE=1 } /token|password|authorization|api[_-]?key|bearer/ { print "[REDACTED_SENSITIVE_LINE]"; next } { print }' >&2
-  printf 'SETUP_DIAGNOSTIC_END\n' >&2
+  {
+    printf 'SETUP_RESULT=FAILED CODE=%s\n' "$setup_status"
+    printf 'SETUP_DIAGNOSTIC_BEGIN\n'
+    tail -n 80 "$STATE_DIR/setup.log" 2>/dev/null \
+      | awk 'BEGIN { IGNORECASE=1 } /token|password|authorization|api[_-]?key|bearer|hf_[[:alnum:]_-]+/ { print "[REDACTED_SENSITIVE_LINE]"; next } { print }'
+    printf 'SETUP_DIAGNOSTIC_END\n'
+  } > "$STATE_DIR/last_setup_failure.log"
+  chmod 600 "$STATE_DIR/last_setup_failure.log"
+  cat "$STATE_DIR/last_setup_failure.log" >&2
   if [[ "${AUTO_STOP_ON_SETUP_FAILURE:-1}" == 1 ]]; then
     if /opt/arye-production/self_stop.sh setup_failed; then
-      # Give Vast time to power the instance off without allowing the Docker
-      # restart policy to repeat a failed setup.  This hold is deliberately
-      # bounded by wall-clock time: if the stopped instance is started again,
-      # the old process exits after the deadline and Docker launches a clean
-      # entrypoint that can resume cached Hugging Face downloads.
+      # Give Vast time to power the instance off.  The hold is bounded by
+      # wall-clock time so it expires while the VM is stopped.  On resume the
+      # current shell replaces itself with a clean entrypoint; this does not
+      # depend on Docker restarting an exited container.
       local hold_limit="${AUTO_STOP_HOLD_MAX_SECONDS:-180}"
       [[ "$hold_limit" =~ ^[1-9][0-9]*$ ]] || hold_limit=180
       stop_requested_epoch="$(date +%s)"
       printf 'AUTO_STOP_HOLD=ARMED MAX_SECONDS=%s\n' "$hold_limit"
       while (( $(date +%s) - stop_requested_epoch < hold_limit )); do sleep 5; done
-      printf 'AUTO_STOP_HOLD=COMPLETE ACTION=EXIT_FOR_CLEAN_RESTART\n'
+      printf 'AUTO_STOP_HOLD=COMPLETE ACTION=RESTART_ENTRYPOINT\n'
+      cleanup
+      trap - EXIT INT TERM
+      exec "$0"
     fi
   fi
   return "$setup_status"
