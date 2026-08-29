@@ -155,7 +155,8 @@ retry dfr_detailing_lora timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" 
   --local-dir "$MODEL_ROOT/loras"
 
 stage verify_ltx_cuda
-uv run python -c 'import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))' \
+timeout --foreground "$LTX_VERIFY_TIMEOUT_SECONDS" \
+  uv run --no-sync python -c 'import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))' \
   > "$STATE_DIR/runtime-check.txt" 2>&1
 
 stage verify_ltx_distilled_cli

@@ -37,9 +37,9 @@ common=(
 )
 
 if [[ "$PROFILE" == draft ]]; then
-  exec uv run python -m ltx_pipelines.distilled "${common[@]}"
+  exec uv run --no-sync python -m ltx_pipelines.distilled "${common[@]}"
 fi
-exec uv run python -m ltx_pipelines.dfr_pipeline \
+exec uv run --no-sync python -m ltx_pipelines.dfr_pipeline \
   "${common[@]}" \
   --detailing-lora "$MODEL_ROOT/loras/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors" \
   --temporal-upscalings 0
