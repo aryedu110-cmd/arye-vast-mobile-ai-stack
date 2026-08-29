@@ -31,7 +31,8 @@ else
   [[ "${PAID_EXECUTION_APPROVED:-0}" == 1 ]] || { printf 'PAID_EXECUTION_APPROVED=1 is required after explicit price approval\n' >&2; request_stop approval_flag_missing; exit 2; }
   [[ "${AUTO_STOP_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] || { printf 'AUTO_STOP_SECONDS is required for paid execution\n' >&2; request_stop cost_deadline_missing; exit 2; }
   [[ "${INSTANCE_HOURLY_RATE_USD:-}" =~ ^[0-9]+([.][0-9]+)?$ && "${BALANCE_STOP_USD:-}" =~ ^[0-9]+([.][0-9]+)?$ ]] || { printf 'INSTANCE_HOURLY_RATE_USD and BALANCE_STOP_USD are required\n' >&2; request_stop cost_parameters_missing; exit 2; }
-  /opt/arye-production/arm_watchdog.sh > "$STATE_DIR/watchdog.log" 2>&1 & WATCHDOG_PID=$!
+  printf 'COST_GUARD=PAID AUTO_STOP_SECONDS=%s\n' "$AUTO_STOP_SECONDS"
+  env -u TEST_LIMIT_SECONDS AUTO_STOP_SECONDS="$AUTO_STOP_SECONDS" /opt/arye-production/arm_watchdog.sh > "$STATE_DIR/watchdog.log" 2>&1 & WATCHDOG_PID=$!
   BALANCE_MAX_FAILURES=1 /opt/arye-production/balance_watchdog.py --check-once > "$STATE_DIR/balance-watchdog.log" 2>&1 || { request_stop balance_preflight_failed; exit 2; }
   /opt/arye-production/balance_watchdog.py > "$STATE_DIR/balance-watchdog.log" 2>&1 & BALANCE_PID=$!
 fi
