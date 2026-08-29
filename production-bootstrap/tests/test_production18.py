@@ -6,6 +6,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
@@ -37,6 +38,22 @@ class Production18Tests(unittest.TestCase):
         header = json.dumps({"x": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}}).encode()
         valid.write_bytes(len(header).to_bytes(8, "little") + header + b"\0\0\0\0")
         self.assertEqual(preflight.safetensors_header(valid)["tensor_count"], 1)
+
+    def test_default_gpu_contract_accepts_supported_48gb_ada_names(self):
+        preflight = module("runtime_preflight_gpu_test", "runtime_preflight.py")
+        import re
+
+        for gpu_name in ("NVIDIA GeForce RTX 4090", "NVIDIA RTX 5880 Ada", "NVIDIA RTX 6000 Ada Generation"):
+            self.assertRegex(gpu_name, re.compile(preflight.DEFAULT_APPROVED_GPU_NAME_REGEX, re.I))
+        for unsupported in ("NVIDIA RTX A6000", "NVIDIA H100 80GB HBM3"):
+            self.assertNotRegex(unsupported, re.compile(preflight.DEFAULT_APPROVED_GPU_NAME_REGEX, re.I))
+
+    def test_balance_watchdog_accepts_current_and_legacy_vast_fields(self):
+        watchdog = module("balance_watchdog_test", "balance_watchdog.py")
+        self.assertEqual(watchdog.extract_balance({"balance": "0.85"}), Decimal("0.85"))
+        self.assertEqual(watchdog.extract_balance({"credit": 1.14}), Decimal("1.14"))
+        with self.assertRaises(KeyError):
+            watchdog.extract_balance({})
 
     def test_queue_blocks_identity_board_and_bad_dimensions(self):
         queue = module("queue_worker_test", "queue_worker.py")

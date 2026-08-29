@@ -17,6 +17,14 @@ INTERVAL = int(os.environ.get("BALANCE_POLL_SECONDS", "60"))
 MAX_FAILURES = int(os.environ.get("BALANCE_MAX_FAILURES", "3"))
 
 
+def extract_balance(payload: dict) -> Decimal:
+    """Accept both current Vast API naming and the legacy field."""
+    value = payload.get("balance", payload.get("credit"))
+    if value is None:
+        raise KeyError("balance")
+    return Decimal(str(value))
+
+
 def stop(reason: str) -> None:
     subprocess.run(["/opt/arye-production/self_stop.sh", reason], check=False, timeout=120)
     raise SystemExit(0)
@@ -45,7 +53,7 @@ def main() -> None:
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 payload = json.load(response)
-            credit = Decimal(str(payload["credit"]))
+            credit = extract_balance(payload)
             failures = 0
             temporary = STATE_DIR / "balance-status.json.tmp"
             temporary.write_text(json.dumps({"ok": True, "credit_usd": str(credit), "stop_threshold_usd": str(threshold), "checked_at": int(time.time())}) + "\n", encoding="utf-8")
@@ -54,7 +62,7 @@ def main() -> None:
                 stop("balance_reserve_reached")
             if args.check_once:
                 return
-        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, InvalidOperation, json.JSONDecodeError) as exc:
             failures += 1
             (STATE_DIR / "balance-status.json").write_text(json.dumps({"ok": False, "consecutive_failures": failures, "checked_at": int(time.time()), "error_type": type(exc).__name__}) + "\n", encoding="utf-8")
             if failures >= MAX_FAILURES:
