@@ -15,14 +15,10 @@ required_files=(
 )
 
 [[ -f "$STATE_DIR/stack.ready" ]]
-[[ "$(<"$STATE_DIR/setup.stage")" == ready_for_ltx_smoke ]]
+[[ -f "$STATE_DIR/ltx-core.ready" ]]
 [[ -s "$STATE_DIR/runtime-check.txt" ]]
 grep -Fqx 'LTX_DISTILLED_MODULE=READY' "$STATE_DIR/distilled-module-check.txt"
 grep -Fqx 'OPENMONTAGE_IMPORT=READY' "$STATE_DIR/openmontage-check.txt"
-grep -Fqx 'MUSETALK_RUNTIME=READY' "$STATE_DIR/musetalk-check.txt"
-grep -Fqx 'CHATTERBOX_HEBREW=READY' "$STATE_DIR/chatterbox-check.txt"
-[[ -f "$STATE_DIR/musetalk.ready" ]]
-[[ -f "$STATE_DIR/chatterbox.ready" ]]
 
 for file in "${required_files[@]}"; do
   [[ -s "$file" ]] || { printf 'MISSING_OR_EMPTY=%s\n' "$file" >&2; exit 1; }
@@ -34,5 +30,7 @@ if find "$MODEL_ROOT" -type f -name '*.incomplete' -print -quit | grep -q .; the
 fi
 
 printf 'READY_STATE=VALID\n'
-printf 'SETUP_STAGE=ready_for_ltx_smoke\n'
+printf 'SETUP_STAGE=%s\n' "$(cat "$STATE_DIR/setup.stage" 2>/dev/null || printf unknown)"
 printf 'MODEL_FILES=%s\n' "${#required_files[@]}"
+printf 'MUSETALK_STATUS=%s\n' "$(cat "$STATE_DIR/musetalk.status" 2>/dev/null || printf pending)"
+printf 'CHATTERBOX_STATUS=%s\n' "$(cat "$STATE_DIR/chatterbox.status" 2>/dev/null || printf pending)"

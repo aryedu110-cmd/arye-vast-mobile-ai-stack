@@ -28,7 +28,7 @@ readonly REQUIRED_MODEL_FILES=(
 
 mkdir -p "$STATE_DIR" "$(dirname "$LTX_ROOT")" "$MODEL_ROOT" "$PROJECT_ROOT"/{inputs,prompts,renders,overlays,logs}
 umask 077
-rm -f "$STATE_DIR/setup.failed" "$STATE_DIR/stack.ready"
+rm -f "$STATE_DIR/setup.failed" "$STATE_DIR/stack.ready" "$STATE_DIR/ltx-core.ready"
 stage() { printf '%s\n' "$1" > "$STATE_DIR/setup.stage"; printf 'SETUP_STAGE=%s\n' "$1"; }
 failed() { touch "$STATE_DIR/setup.failed"; stage failed; }
 trap failed ERR
@@ -171,13 +171,5 @@ stage verify_openmontage_runtime
 ) > "$STATE_DIR/openmontage-check.txt" 2>&1
 
 touch "$STATE_DIR/ltx-core.ready"
-stage ltx_core_ready_for_first_shot
-
-stage install_musetalk
-/opt/arye-production/install_musetalk.sh
-
-stage install_chatterbox
-/opt/arye-production/install_chatterbox.sh
-
 touch "$STATE_DIR/stack.ready"
-stage ready_for_ltx_smoke
+stage ready_for_ltx_generation

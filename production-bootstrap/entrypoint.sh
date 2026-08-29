@@ -9,6 +9,7 @@ HEALTH_PID=""
 TUNNEL_PID=""
 SETUP_PID=""
 REPORTER_PID=""
+OPTIONAL_PID=""
 
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"
@@ -26,6 +27,7 @@ cleanup() {
   [[ -n "$TUNNEL_PID" ]] && kill "$TUNNEL_PID" 2>/dev/null || true
   [[ -n "$HEALTH_PID" ]] && kill "$HEALTH_PID" 2>/dev/null || true
   [[ -n "$REPORTER_PID" ]] && kill "$REPORTER_PID" 2>/dev/null || true
+  [[ -n "$OPTIONAL_PID" ]] && kill "$OPTIONAL_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -76,6 +78,7 @@ PUBLIC_HEALTH="${PUBLIC_URL}/healthz"
 printf '%s\n' "$PUBLIC_HEALTH" > "$STATE_DIR/public_health_url.txt"
 chmod 600 "$STATE_DIR/public_health_url.txt"
 printf 'PUBLIC_HEALTH=%s\n' "$PUBLIC_HEALTH"
+printf 'PUBLIC_STUDIO=%s/studio\n' "$PUBLIC_URL"
 
 stage verify_public_https
 for _ in $(seq 1 20); do
@@ -159,6 +162,23 @@ report_setup() {
 # only the shell that launched bootstrap_ltx.sh is allowed to wait for it and
 # collect its real exit status.
 report_setup
+
+stage start_optional_components
+(
+  set -o pipefail
+  stdbuf -oL -eL /opt/arye-production/install_optional_components.sh 2>&1 \
+    | tr '\r\000' '\n\n' \
+    | tee "$STATE_DIR/optional-setup.log" \
+    | stdbuf -oL awk '
+        BEGIN { IGNORECASE=1 }
+        /token|password|authorization|api[_-]?key|bearer|hf_[[:alnum:]_-]+/ {
+          print "OPTIONAL_LOG=[REDACTED_SENSITIVE_LINE]";
+          next
+        }
+        { print "OPTIONAL_LOG=" $0 }
+      '
+) &
+OPTIONAL_PID=$!
 
 if [[ "${TEST_MODE:-0}" != 1 && -n "${AUTO_STOP_SECONDS:-}" ]]; then
   stage arm_runtime_safety
