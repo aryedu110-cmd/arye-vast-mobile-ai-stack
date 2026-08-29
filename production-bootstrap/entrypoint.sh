@@ -34,8 +34,10 @@ if [[ "${TEST_MODE:-0}" == 1 ]]; then
   TEST_LIMIT_SECONDS="${TEST_LIMIT_SECONDS:-360}" /opt/arye-production/arm_watchdog.sh \
     > "$STATE_DIR/watchdog.log" 2>&1 &
 elif [[ -n "${AUTO_STOP_SECONDS:-}" ]]; then
-  TEST_LIMIT_SECONDS="$AUTO_STOP_SECONDS" /opt/arye-production/arm_watchdog.sh \
-    > "$STATE_DIR/watchdog.log" 2>&1 &
+  # A fixed wall-clock watchdog must not race a long first-time installation.
+  # Bootstrap steps already have their own bounded timeouts and retries.  Arm
+  # the general cost-safety timer only after the full stack is ready.
+  printf 'WATCHDOG=DEFERRED_UNTIL_SETUP_READY LIMIT_SECONDS=%s\n' "$AUTO_STOP_SECONDS"
 fi
 
 stage create_private_token
@@ -157,6 +159,12 @@ report_setup() {
 # only the shell that launched bootstrap_ltx.sh is allowed to wait for it and
 # collect its real exit status.
 report_setup
+
+if [[ "${TEST_MODE:-0}" != 1 && -n "${AUTO_STOP_SECONDS:-}" ]]; then
+  stage arm_runtime_safety
+  TEST_LIMIT_SECONDS="$AUTO_STOP_SECONDS" /opt/arye-production/arm_watchdog.sh \
+    > "$STATE_DIR/watchdog.log" 2>&1 &
+fi
 
 stage supervise
 while kill -0 "$HEALTH_PID" 2>/dev/null && kill -0 "$TUNNEL_PID" 2>/dev/null; do sleep 2; done

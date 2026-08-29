@@ -10,6 +10,7 @@ readonly LTX_REF="${LTX_REF:-main}"
 readonly LTX_SOURCE_TIMEOUT_SECONDS="${LTX_SOURCE_TIMEOUT_SECONDS:-300}"
 readonly UV_SYNC_TIMEOUT_SECONDS="${UV_SYNC_TIMEOUT_SECONDS:-1200}"
 readonly LTX_VERIFY_TIMEOUT_SECONDS="${LTX_VERIFY_TIMEOUT_SECONDS:-60}"
+readonly MODEL_DOWNLOAD_TIMEOUT_SECONDS="${MODEL_DOWNLOAD_TIMEOUT_SECONDS:-1800}"
 readonly NETWORK_RETRY_ATTEMPTS="${NETWORK_RETRY_ATTEMPTS:-3}"
 readonly INITIAL_SETUP_MIN_FREE_GB="${INITIAL_SETUP_MIN_FREE_GB:-200}"
 readonly READY_SETUP_MIN_FREE_GB="${READY_SETUP_MIN_FREE_GB:-32}"
@@ -138,14 +139,8 @@ else
   touch "$STATE_DIR/openmontage-runtime.ready"
 fi
 
-stage install_musetalk
-/opt/arye-production/install_musetalk.sh
-
-stage install_chatterbox
-/opt/arye-production/install_chatterbox.sh
-
 stage download_ltx25_models
-hf download Lightricks/LTX-2.5 \
+retry ltx25_models timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" hf download Lightricks/LTX-2.5 \
   diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors \
   text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors \
   vae/ltx-2.5-video-vae-bf16.safetensors \
@@ -155,7 +150,7 @@ hf download Lightricks/LTX-2.5 \
   --local-dir "$MODEL_ROOT"
 
 stage download_dfr_detailing_lora
-hf download Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler \
+retry dfr_detailing_lora timeout --foreground "$MODEL_DOWNLOAD_TIMEOUT_SECONDS" hf download Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler \
   ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors \
   --local-dir "$MODEL_ROOT/loras"
 
@@ -174,6 +169,15 @@ stage verify_openmontage_runtime
   cd "$OPENMONTAGE_ROOT"
   .venv/bin/python -c 'from tools.tool_registry import registry; assert registry is not None; print("OPENMONTAGE_IMPORT=READY")'
 ) > "$STATE_DIR/openmontage-check.txt" 2>&1
+
+touch "$STATE_DIR/ltx-core.ready"
+stage ltx_core_ready_for_first_shot
+
+stage install_musetalk
+/opt/arye-production/install_musetalk.sh
+
+stage install_chatterbox
+/opt/arye-production/install_chatterbox.sh
 
 touch "$STATE_DIR/stack.ready"
 stage ready_for_ltx_smoke
