@@ -1,6 +1,11 @@
 name: Build Production-18 release candidate
 
 on:
+  push:
+    branches: [production-18-build]
+    paths:
+      - "production-bootstrap/**"
+      - ".github/workflows/publish-production-bootstrap.yml"
   workflow_dispatch:
     inputs:
       publish:
@@ -30,7 +35,7 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
       - name: Log in only when publishing
-        if: ${{ inputs.publish }}
+        if: ${{ github.event_name == 'push' || inputs.publish }}
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
@@ -42,14 +47,14 @@ jobs:
           context: production-bootstrap
           file: production-bootstrap/Dockerfile
           platforms: linux/amd64
-          push: ${{ inputs.publish }}
+          push: ${{ github.event_name == 'push' || inputs.publish }}
           tags: ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-18-rc2-${{ github.sha }}
           cache-from: type=gha,scope=production-18
           cache-to: type=gha,mode=max,scope=production-18
           provenance: true
           sbom: true
       - name: Verify anonymous pull of published RC
-        if: ${{ inputs.publish }}
+        if: ${{ github.event_name == 'push' || inputs.publish }}
         run: |
           docker logout ghcr.io
           docker pull ghcr.io/aryedu110-cmd/arye-vast-mobile-health:ltx25-production-18-rc2-${{ github.sha }}
