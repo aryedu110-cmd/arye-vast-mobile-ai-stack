@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Check out exact source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install video test dependency
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Run contract and unit tests
         run: bash production-bootstrap/test_static.sh
       - name: Set up Buildx
